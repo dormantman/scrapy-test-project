@@ -2,8 +2,11 @@ import os
 from pathlib import Path
 
 import pytest
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from app.db import get_session
+from app.main import app
 from app.models import Base
 
 TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL", "postgresql+asyncpg://books:books@localhost:5432/books_test")
@@ -31,3 +34,11 @@ async def session():
     async with async_sessionmaker(engine, expire_on_commit=False)() as session:
         yield session
     await engine.dispose()
+
+
+@pytest.fixture
+async def client(session):
+    app.dependency_overrides[get_session] = lambda: session
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        yield client
+    app.dependency_overrides.clear()
